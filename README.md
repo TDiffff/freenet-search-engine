@@ -4,6 +4,9 @@ A decentralized search engine for discovering web applications on the [Freenet](
 
 <img width="1202" height="663" alt="image" src="https://github.com/user-attachments/assets/4b3b8d84-663d-45f5-85a0-54f63b31648a" />
 
+## Try it
+
+If you have a freenet node running, browse [This web app contract](http://127.0.0.1:7509/v1/contract/web/FinderTZGHAY8DWSeQPRMN9K3p884WsLTUCjjH4QSZqH/)
 ## Architecture
 
 The project is a self-contained Rust workspace:
