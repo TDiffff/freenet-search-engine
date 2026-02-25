@@ -22,7 +22,7 @@ ciborium = "0.2"
 sha2 = "0.10"
 lzma-rs = "0.3"
 unicode-normalization = "0.1"
-freenet-stdlib = { git = "https://github.com/freenet/freenet-stdlib", rev = "0a941ce" }
+freenet-stdlib = { git = "https://github.com/freenet/freenet-stdlib", rev = "3a7685a" }
 ed25519-dalek = { version = "2.1", features = ["rand_core", "serde"] }
 proptest = "1"
 search-common = { path = "crates/search-common" }

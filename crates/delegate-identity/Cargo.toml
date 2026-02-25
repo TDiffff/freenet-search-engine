@@ -21,5 +21,6 @@ ed25519-dalek = { workspace = true, features = ["rand_core"] }
 serde = { workspace = true }
 ciborium = { workspace = true }
 rand = { version = "0.8", default-features = false, features = ["std"] }
+getrandom = { version = "0.2", features = ["js"] }
 
 [dev-dependencies]
