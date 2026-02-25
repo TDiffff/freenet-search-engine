@@ -9,10 +9,14 @@ mod state;
 mod views;
 
 use state::{
-    DiscoveryPhase, DISCOVERY_PHASE, NODE_CONNECTED, SEARCH_QUERY, SEARCH_RESULTS,
-    SHARDS_AVAILABLE,
+    CurrentPage, DiscoveryPhase, CURRENT_PAGE, DISCOVERY_PHASE, NODE_CONNECTED, SEARCH_QUERY,
+    SEARCH_RESULTS, SHARDS_AVAILABLE,
 };
 use views::app_directory::AppDirectory;
+use views::docs_page::DocsPage;
+use views::footer::AppFooter;
+use views::index_view::IndexView;
+use views::onboarding::OnboardingModal;
 use views::search_bar::SearchBar;
 use views::search_results::SearchResults;
 use views::settings::SettingsPanel;
@@ -48,6 +52,7 @@ fn App() -> Element {
     let has_shards = *SHARDS_AVAILABLE.read() > 0;
     let has_results = !SEARCH_RESULTS.read().is_empty();
     let show_fulltext = !query.is_empty() && has_shards && has_results;
+    let current_page = CURRENT_PAGE.read().clone();
 
     let status_class = if connected {
         "status-indicator connected"
@@ -68,23 +73,73 @@ fn App() -> Element {
     };
 
     let mut show_settings = use_signal(|| false);
+    let mut show_onboarding = use_signal(|| {
+        web_sys::window()
+            .and_then(|w| w.local_storage().ok())
+            .flatten()
+            .and_then(|s| s.get_item("onboarding_seen").ok())
+            .flatten()
+            .map(|v| v != "true")
+            .unwrap_or(true)
+    });
 
     rsx! {
         document::Stylesheet { href: asset!("/assets/main.css") }
+        document::Title { "Freenet Search" }
+
+        // Onboarding modal (overlay, shown once)
+        if *show_onboarding.read() {
+            OnboardingModal {
+                on_close: move |_| {
+                    show_onboarding.set(false);
+                }
+            }
+        }
 
         div { class: "app-shell",
             // Header
             header { class: "app-header",
-                h1 { class: "app-title", "Freenet Search" }
+                h1 {
+                    class: "app-title",
+                    onclick: move |_| {
+                        *CURRENT_PAGE.write() = CurrentPage::Home;
+                    },
+                    style: "cursor: pointer;",
+                    "Freenet Search"
+                }
+
+                // Navigation tabs
+                nav { class: "nav-tabs",
+                    button {
+                        class: if matches!(current_page, CurrentPage::Home) { "nav-tab active" } else { "nav-tab" },
+                        onclick: move |_| {
+                            *CURRENT_PAGE.write() = CurrentPage::Home;
+                        },
+                        "Home"
+                    }
+                    button {
+                        class: if matches!(current_page, CurrentPage::Docs) { "nav-tab active" } else { "nav-tab" },
+                        onclick: move |_| {
+                            *CURRENT_PAGE.write() = CurrentPage::Docs;
+                        },
+                        "Docs"
+                    }
+                    button {
+                        class: if matches!(current_page, CurrentPage::Index) { "nav-tab active" } else { "nav-tab" },
+                        onclick: move |_| {
+                            *CURRENT_PAGE.write() = CurrentPage::Index;
+                        },
+                        "Index / Catalog Explorer"
+                    }
+                }
 
                 div { class: "header-controls",
-                    // Discovery phase indicator
                     if let Some(text) = phase_text {
                         span { class: "discovery-status", "{text}" }
                     }
 
                     button {
-                        class: "clear-cache-btn",
+                        class: "btn btn-ghost",
                         title: "Clear cached app data and rescan",
                         onclick: move |_| {
                             discovery::cache::clear_cache();
@@ -93,14 +148,13 @@ fn App() -> Element {
                     }
 
                     button {
-                        class: "clear-cache-btn",
+                        class: "btn btn-ghost",
                         onclick: move |_| {
                             show_settings.toggle();
                         },
                         if *show_settings.read() { "Close settings" } else { "Settings" }
                     }
 
-                    // Connection status
                     div { class: "{status_class}",
                         span { class: "status-dot" }
                         span { class: "status-text", "{status_text}" }
@@ -113,15 +167,26 @@ fn App() -> Element {
                 SettingsPanel {}
             }
 
-            // Search bar
-            SearchBar {}
-
-            // Main content: fulltext results when available, otherwise app directory
-            if show_fulltext {
-                SearchResults {}
-            } else {
-                AppDirectory {}
+            // Page content
+            match current_page {
+                CurrentPage::Home => rsx! {
+                    SearchBar {}
+                    if show_fulltext {
+                        SearchResults {}
+                    } else {
+                        AppDirectory {}
+                    }
+                },
+                CurrentPage::Docs => rsx! {
+                    DocsPage {}
+                },
+                CurrentPage::Index => rsx! {
+                    IndexView {}
+                },
             }
+
+            // Footer (always visible)
+            AppFooter {}
         }
     }
 }

@@ -1,5 +1,9 @@
 pub mod app_card;
 pub mod app_directory;
+pub mod docs_page;
+pub mod footer;
+pub mod index_view;
+pub mod onboarding;
 pub mod search_bar;
 pub mod search_results;
 pub mod settings;

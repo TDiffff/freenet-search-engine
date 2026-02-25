@@ -27,6 +27,8 @@ pub struct AppEntry {
     pub subscribers: u32,
     #[serde(default)]
     pub version: Option<u64>,
+    #[serde(default)]
+    pub publisher_key: Option<Vec<u8>>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -63,7 +65,18 @@ pub enum ContributionStatus {
     Failed(String),
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum CurrentPage {
+    #[default]
+    Home,
+    Docs,
+    Index,
+}
+
 // --- Global signals ---
+
+/// Current page for navigation
+pub static CURRENT_PAGE: GlobalSignal<CurrentPage> = Global::new(CurrentPage::default);
 
 /// All discovered contract keys -> type mapping
 pub static CONTRACT_TYPES: GlobalSignal<HashMap<String, ContractType>> = Global::new(HashMap::new);

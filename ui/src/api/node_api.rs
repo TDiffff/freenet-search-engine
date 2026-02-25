@@ -4,8 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use dioxus::prelude::*;
 use freenet_stdlib::client_api::{
-    ClientRequest, ContractRequest, ContractResponse, HostResponse, NodeDiagnosticsConfig,
-    NodeQuery, QueryResponse,
+    ClientRequest, ContractRequest, ContractResponse, HostResponse,
 };
 use freenet_stdlib::prelude::ContractInstanceId;
 use wasm_bindgen::prelude::*;
@@ -14,17 +13,13 @@ use web_sys::{MessageEvent, WebSocket};
 
 use crate::state::{
     ContractType, ContributionStatus, DiscoveryPhase, APP_CATALOG, CONTRIBUTION_HISTORY,
-    CONTRACT_TYPES, DISCOVERY_PHASE, NODE_CONNECTED, TOTAL_CONTRACTS, TYPES_CHECKED,
-    TYPE_CHECK_QUEUE,
+    CONTRACT_TYPES, DISCOVERY_PHASE, NODE_CONNECTED, TYPES_CHECKED, TYPE_CHECK_QUEUE,
 };
 
 use super::types::NodeConfig;
 
 /// Prevent duplicate polling intervals across reconnections.
 static POLLING_STARTED: AtomicBool = AtomicBool::new(false);
-
-/// Interval between diagnostics queries (milliseconds).
-const POLL_INTERVAL_MS: i32 = 10_000;
 
 /// Interval between catalog/shard re-fetch (milliseconds).
 /// Compensates for subscription timeouts — ensures state stays fresh.
@@ -81,9 +76,6 @@ pub fn connect_node_api(config: &NodeConfig) {
         // Update shared handle so existing intervals use the new connection
         set_current_ws(ws_for_open.clone());
 
-        // Send diagnostics immediately
-        send_diagnostics_query(&ws_for_open.borrow());
-
         // Subscribe to search index contracts (catalog + 16 shards)
         super::contracts::subscribe_catalog(&ws_for_open.borrow());
         for shard_id in 0u8..16 {
@@ -138,13 +130,6 @@ pub fn send_request(ws: &WebSocket, request: &ClientRequest) {
     }
 }
 
-fn send_diagnostics_query(ws: &WebSocket) {
-    let request = ClientRequest::NodeQueries(NodeQuery::NodeDiagnostics {
-        config: NodeDiagnosticsConfig::full(),
-    });
-    send_request(ws, &request);
-}
-
 /// Parse a bincode-encoded HostResponse and update global signals.
 fn handle_host_response(bytes: &[u8]) {
     use freenet_stdlib::client_api::ClientError;
@@ -166,38 +151,11 @@ fn handle_host_response(bytes: &[u8]) {
     };
 
     match response {
-        HostResponse::QueryResponse(QueryResponse::NodeDiagnostics(diag)) => {
-            *DISCOVERY_PHASE.write() = DiscoveryPhase::FetchingContracts;
-
-            // Update total contracts count and cache it
-            let contract_count = diag.contract_states.len();
-            *TOTAL_CONTRACTS.write() = contract_count;
-            crate::discovery::cache::save_total_contracts(contract_count);
-
-            // Queue new contracts for type detection + update subscribers
-            let has_new = {
-                let known = CONTRACT_TYPES.read();
-                let mut queue = TYPE_CHECK_QUEUE.write();
-                let mut catalog = APP_CATALOG.write();
-                for (key, cstate) in &diag.contract_states {
-                    let key_str = format!("{}", key);
-                    if let Some(entry) = catalog.get_mut(&key_str) {
-                        entry.subscribers = cstate.subscribers;
-                    }
-                    if !known.contains_key(&key_str) {
-                        let already_queued = queue.iter().any(|(k, _)| k == &key_str);
-                        if !already_queued {
-                            queue.push_back((key_str, key.id().as_bytes().to_vec()));
-                        }
-                    }
-                }
-                !queue.is_empty()
-            }; // all guards dropped here
-            if has_new {
-                *DISCOVERY_PHASE.write() = DiscoveryPhase::DetectingTypes;
-            }
-        }
-        HostResponse::ContractResponse(ContractResponse::GetResponse { key, state, .. }) => {
+        HostResponse::ContractResponse(ContractResponse::GetResponse {
+            key,
+            state,
+            contract,
+        }) => {
             // Route search index contract responses to their handlers
             if super::contracts::is_catalog_key(&key) {
                 super::contracts::handle_catalog_response(state.as_ref());
@@ -216,6 +174,13 @@ fn handle_host_response(bytes: &[u8]) {
             if contract_type == ContractType::WebApp {
                 let size = state.as_ref().len() as u64;
                 let version = crate::discovery::title::extract_version_from_state(state.as_ref());
+
+                // Extract publisher key (first 32 bytes of contract params = Ed25519 pubkey)
+                let publisher_key: Option<Vec<u8>> = contract.as_ref().map(|c| {
+                    let params = c.params();
+                    let bytes = params.as_ref();
+                    bytes[..32.min(bytes.len())].to_vec()
+                });
 
                 let (has_title, has_description, cached_version) = {
                     let catalog = APP_CATALOG.read();
@@ -256,6 +221,7 @@ fn handle_host_response(bytes: &[u8]) {
                         Some(size),
                         version,
                         true, // fresh extraction — clear stale cache if blank
+                        publisher_key.as_deref(),
                     );
                 } else {
                     // Fully cached and unchanged — just update size
@@ -266,6 +232,7 @@ fn handle_host_response(bytes: &[u8]) {
                         Some(size),
                         version,
                         false, // no extraction — preserve cached title/desc
+                        publisher_key.as_deref(),
                     );
                 }
                 crate::discovery::cache::save_cache();
@@ -317,16 +284,7 @@ fn handle_host_response(bytes: &[u8]) {
 
 /// Start polling and type-checking intervals (called exactly once).
 fn start_polling_intervals() {
-    // Diagnostics polling
-    let diag_callback = Closure::<dyn FnMut()>::new(move || {
-        with_current_ws(send_diagnostics_query);
-    });
     let window = web_sys::window().expect("no global window");
-    let _ = window.set_interval_with_callback_and_timeout_and_arguments_0(
-        diag_callback.as_ref().unchecked_ref(),
-        POLL_INTERVAL_MS,
-    );
-    diag_callback.forget();
 
     // Periodic re-fetch of catalog + shard states (compensates for subscription timeouts)
     let refetch_callback = Closure::<dyn FnMut()>::new(move || {
@@ -354,7 +312,7 @@ fn start_polling_intervals() {
             if let Ok(id_arr) = <[u8; 32]>::try_from(id_bytes.as_slice()) {
                 let request = ClientRequest::ContractOp(ContractRequest::Get {
                     key: ContractInstanceId::new(id_arr),
-                    return_contract_code: false,
+                    return_contract_code: true,
                     subscribe: false,
                     blocking_subscribe: false,
                 });

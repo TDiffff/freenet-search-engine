@@ -17,13 +17,15 @@ pub fn SearchBar() -> Element {
         .count();
     let plural = if webapp_count != 1 { "s" } else { "" };
 
+    let scanning = checked < total && total > 0;
+
     rsx! {
         div { class: "search-section",
             div { class: "search-bar",
                 input {
                     class: "search-input",
                     r#type: "text",
-                    placeholder: "Search web apps...",
+                    placeholder: "Search decentralized web apps...",
                     value: "{query}",
                     oninput: move |e| {
                         *SEARCH_QUERY.write() = e.value();
@@ -40,12 +42,18 @@ pub fn SearchBar() -> Element {
                 }
             }
 
+            if query.is_empty() && !scanning {
+                p { class: "search-hint text-secondary",
+                    "Try searching for 'chat', 'social', or 'blog'"
+                }
+            }
+
             div { class: "filter-row",
                 span { class: "webapp-count",
                     "{webapp_count} web app{plural} found"
                 }
 
-                if checked < total && total > 0 {
+                if scanning {
                     span { class: "scan-progress",
                         "Scanning: {checked}/{total} contracts"
                     }

@@ -3,6 +3,6 @@ name = "freenet-search-engine"
 default_platform = "web"
 
 [web.app]
-title = "Freenet Search"
+base_path = "v1/contract/web/FinderTZGHAY8DWSeQPRMN9K3p884WsLTUCjjH4QSZqH"
 
 [web.resource.dev]

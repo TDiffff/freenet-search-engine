@@ -141,6 +141,7 @@ pub fn update_catalog_entry(
     size: Option<u64>,
     version: Option<u64>,
     extracted: bool,
+    publisher_key: Option<&[u8]>,
 ) {
     let now = js_sys::Date::now() as u64 / 1000;
     let mut catalog = APP_CATALOG.write();
@@ -152,6 +153,7 @@ pub fn update_catalog_entry(
         size_bytes: None,
         subscribers: 0,
         version: None,
+        publisher_key: None,
     });
     if extracted {
         entry.title = title.map(|t| t.to_string());
@@ -169,6 +171,9 @@ pub fn update_catalog_entry(
     }
     if let Some(v) = version {
         entry.version = Some(v);
+    }
+    if let Some(pk) = publisher_key {
+        entry.publisher_key = Some(pk.to_vec());
     }
     entry.last_seen = now;
 }

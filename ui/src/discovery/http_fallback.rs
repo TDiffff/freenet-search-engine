@@ -27,6 +27,7 @@ pub fn try_fetch_title(key: String, version: Option<u64>, size: Option<u64>) {
                         size,
                         version,
                         true, // fresh extraction
+                        None, // no contract container available via HTTP
                     );
                     crate::discovery::cache::save_cache();
                 }

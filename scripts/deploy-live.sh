@@ -22,7 +22,7 @@ WEBAPP_DIR="$PROJECT_ROOT/target/webapp"
 DIOXUS_TOML="$PROJECT_ROOT/Dioxus.toml"
 MANIFEST="$DEPLOY_DIR/.manifest"
 NODE_PORT=7509
-PUBLISH_TIMEOUT=30
+PUBLISH_TIMEOUT=5
 
 FORCE=false
 DRY_RUN=false
@@ -76,6 +76,19 @@ if [ "$node_status" = "000" ]; then
 fi
 echo "  OK. Node responding (HTTP $node_status)."
 
+# Check network connectivity — need at least 1 peer to publish
+echo "  Checking network peers..."
+PEER_OUTPUT=$(fdev network query 2>&1)
+PEER_COUNT=$(echo "$PEER_OUTPUT" | grep -c '|.*|.*:.*|' || true)
+if [ "$PEER_COUNT" -lt 1 ]; then
+    echo "ERROR: No peers connected — cannot publish to network."
+    echo "  Wait for the node to discover peers, or check your network."
+    echo "  Peer query output:"
+    echo "$PEER_OUTPUT"
+    exit 1
+fi
+echo "  OK. $PEER_COUNT peer(s) connected."
+
 # --- Phase 2: Build contract WASMs ---
 echo ""
 echo "[2/7] Building contract WASMs..."
@@ -102,7 +115,7 @@ if [ -n "$SAVED_KEYS" ];     then mv "$SAVED_KEYS" "$WEBAPP_KEYS"; fi
 if [ -n "$SAVED_MANIFEST" ]; then mv "$SAVED_MANIFEST" "$MANIFEST"; fi
 if [ -n "$SAVED_NONCE" ];    then mv "$SAVED_NONCE" "$VANITY_NONCE"; fi
 
-cargo run -p deploy-helper -- "$DEPLOY_DIR" 2>/dev/null
+cargo run -p deploy-helper -- "$DEPLOY_DIR"
 
 # --- Phase 4: Compute contract IDs, detect changes, query node ---
 echo ""
@@ -130,7 +143,7 @@ if [ ! -f "$WEBAPP_DIR/webapp.parameters" ]; then
         --output /tmp/webapp-bootstrap.metadata \
         --parameters "$WEBAPP_DIR/webapp.parameters" \
         --key-file "$WEBAPP_KEYS" \
-        --version 1 2>/dev/null
+        --version 1
     rm -f /tmp/webapp-bootstrap.tar.xz /tmp/webapp-bootstrap.metadata
 fi
 
@@ -312,20 +325,20 @@ else
                 echo "  Publishing catalog..."
                 fdev network publish \
                     --code "$CATALOG_CODE" --parameters "$DEPLOY_DIR/catalog-params.cbor" \
-                    contract --state "$DEPLOY_DIR/catalog-state.cbor" &>/dev/null &
+                    contract --state "$DEPLOY_DIR/catalog-state.cbor" &
                 PUBLISH_PIDS+=($!) ;;
             shard)
                 echo "  Publishing shard $idx..."
                 fdev network publish \
                     --code "$SHARD_CODE" --parameters "$DEPLOY_DIR/shard-${idx}-params.cbor" \
-                    contract --state "$DEPLOY_DIR/shard-${idx}-state.cbor" &>/dev/null &
+                    contract --state "$DEPLOY_DIR/shard-${idx}-state.cbor" &
                 PUBLISH_PIDS+=($!) ;;
             webapp)
                 echo "  Publishing webapp..."
                 fdev network publish \
                     --code "$WEB_CONTAINER_WASM" --parameters "$WEBAPP_DIR/webapp.parameters" \
                     contract --webapp-archive "$WEBAPP_DIR/webapp.tar.xz" \
-                    --webapp-metadata "$WEBAPP_DIR/webapp.metadata" &>/dev/null &
+                    --webapp-metadata "$WEBAPP_DIR/webapp.metadata" &
                 PUBLISH_PIDS+=($!) ;;
         esac
     done

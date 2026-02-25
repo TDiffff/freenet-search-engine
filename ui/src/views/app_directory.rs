@@ -8,8 +8,8 @@ use super::app_card::AppCard;
 use search_common::types::CatalogState;
 
 use crate::state::{
-    AppEntry, ContractType, DiscoveryPhase, APP_CATALOG, CATALOG_STATE, CONTRACT_TYPES,
-    DISCOVERY_PHASE, NODE_CONNECTED, SEARCH_QUERY,
+    AppEntry, ContractType, DiscoveryPhase, APP_CATALOG, CATALOG_STATE, CONTRIBUTION_ENABLED,
+    CONTRACT_TYPES, DISCOVERY_PHASE, NODE_CONNECTED, SEARCH_QUERY,
 };
 
 #[component]
@@ -19,6 +19,8 @@ pub fn AppDirectory() -> Element {
     let query = SEARCH_QUERY.read().clone().to_lowercase();
     let connected = *NODE_CONNECTED.read();
     let phase = DISCOVERY_PHASE.read().clone();
+    let contribution_enabled = *CONTRIBUTION_ENABLED.read();
+    let mut show_cta = use_signal(|| true);
 
     // Only collect WebApp contracts
     let mut entries: Vec<(String, Option<AppEntry>)> = types
@@ -83,15 +85,39 @@ pub fn AppDirectory() -> Element {
                 div { class: "directory-empty",
                     if !connected {
                         p { "Not connected to Freenet node." }
-                        p { class: "text-secondary", "Make sure the node is running on port 7509." }
+                        p { class: "text-secondary", "Check that your Freenet node is running at localhost:7509" }
                     } else if matches!(phase, DiscoveryPhase::Idle | DiscoveryPhase::FetchingContracts | DiscoveryPhase::DetectingTypes) {
-                        p { "Scanning for web apps..." }
-                        p { class: "text-secondary", "This may take a moment." }
+                        div { class: "scanning-pulse",
+                            p { "Scanning for web apps..." }
+                            p { class: "text-secondary", "This may take a moment." }
+                        }
+                    } else if !query.is_empty() {
+                        p { "No apps match your search." }
+                        p { class: "text-secondary", "Try different keywords." }
                     } else {
                         p { "No web apps found." }
+                        p { class: "text-secondary", "Apps will appear here as your node discovers them on the network." }
                     }
                 }
             } else {
+                if !contribution_enabled && *show_cta.read() {
+                    div { class: "cta-banner",
+                        span { class: "cta-text",
+                            "Help build the decentralized index \u{2014} enable contributions to share your discoveries with the network."
+                        }
+                        button {
+                            class: "cta-btn btn-primary",
+                            onclick: move |_| { *CONTRIBUTION_ENABLED.write() = true; },
+                            "Enable"
+                        }
+                        button {
+                            class: "cta-dismiss",
+                            onclick: move |_| { show_cta.set(false); },
+                            "\u{00d7}"
+                        }
+                    }
+                }
+
                 div { class: "app-grid",
                     for (key, app_entry) in sorted.iter() {
                         {
@@ -147,8 +173,8 @@ pub fn AppDirectory() -> Element {
 
 /// Group entries by title and keep only the best entry per app.
 ///
-/// Ranking: catalog attestations (network-wide signal) > state size
-/// (larger = more complete) > version (tiebreaker).
+/// Ranking: has_content > catalog attestations. No further tiebreaker —
+/// version/size are unreliable for distinguishing current vs old deploys.
 /// Subscribers are NOT used — they only reflect direct peers, not the network.
 fn deduplicate_by_title(
     entries: Vec<(String, Option<AppEntry>)>,
@@ -173,18 +199,20 @@ fn deduplicate_by_title(
             let old_content = has_content(&existing.1);
             let new_atts = attestation_count(catalog_state, &key);
             let old_atts = attestation_count(catalog_state, &existing.0);
-            let new_size = e.size_bytes.unwrap_or(0);
-            let old_size = existing.1.size_bytes.unwrap_or(0);
+            let same_publisher = match (&e.publisher_key, &existing.1.publisher_key) {
+                (Some(a), Some(b)) => a == b,
+                _ => false,
+            };
             let new_ver = e.version.unwrap_or(0);
             let old_ver = existing.1.version.unwrap_or(0);
-            // Working content (non-blank page) wins first, then attestations, size, version
-            let better = (new_content && !old_content)
-                || (new_content == old_content && new_atts > old_atts)
-                || (new_content == old_content && new_atts == old_atts && new_size > old_size)
-                || (new_content == old_content
-                    && new_atts == old_atts
-                    && new_size == old_size
-                    && new_ver > old_ver);
+
+            let better =
+                // 1. Content wins (non-blank page beats blank)
+                (new_content && !old_content)
+                // 2. Same publisher → higher version = more recent deploy
+                || (new_content == old_content && same_publisher && new_ver > old_ver)
+                // 3. Different publishers → more attestations wins
+                || (new_content == old_content && !same_publisher && new_atts > old_atts);
             if better {
                 by_title.insert(title_lower, (key, e));
             }

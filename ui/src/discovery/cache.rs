@@ -8,7 +8,7 @@ use crate::state::{AppEntry, APP_CATALOG};
 const STORAGE_KEY: &str = "freenet_search_apps";
 
 /// Bump this when the AppEntry schema changes to auto-clear stale caches.
-const CACHE_VERSION: u32 = 5;
+const CACHE_VERSION: u32 = 7;
 
 #[derive(Serialize, Deserialize)]
 struct CacheData {
@@ -65,13 +65,15 @@ pub fn save_cache() {
     }
 }
 
-/// Clear cache and reset in-memory catalog.
+/// Clear cache and reset in-memory catalog (including contract state).
 pub fn clear_cache() {
     if let Some(storage) = get_storage() {
         let _ = storage.remove_item(STORAGE_KEY);
         let _ = storage.remove_item(TOTAL_KEY);
     }
     APP_CATALOG.write().clear();
+    // Also clear catalog/shard state so fresh data is fetched from the node
+    crate::api::contracts::clear_contract_cache();
     tracing::info!("Cache cleared");
 }
 

@@ -25,46 +25,57 @@ pub fn SettingsPanel() -> Element {
 
     rsx! {
         div { class: "settings-panel",
-            div { class: "settings-section",
-                h2 { "Contribution" }
-
-                label { class: "settings-toggle",
-                    input {
-                        r#type: "checkbox",
-                        checked: enabled,
-                        onchange: move |e: Event<FormData>| {
-                            let val = e.checked();
-                            *CONTRIBUTION_ENABLED.write() = val;
-                            if let Some(storage) = web_sys::window()
-                                .and_then(|w| w.local_storage().ok())
-                                .flatten()
-                            {
-                                let _ = storage.set_item(
-                                    "contribution_enabled",
-                                    if val { "true" } else { "false" },
-                                );
-                            }
-                            // When toggled ON, re-queue already-discovered apps
-                            // so they get contributed on the next diagnostics poll
-                            if val {
-                                crate::api::contribution::retrigger_contributions();
-                            }
-                        },
+            div { class: "settings-card",
+                div { class: "settings-card-header",
+                    h3 { "Index Contributions" }
+                    label { class: "settings-toggle",
+                        input {
+                            r#type: "checkbox",
+                            checked: enabled,
+                            onchange: move |e: Event<FormData>| {
+                                let val = e.checked();
+                                *CONTRIBUTION_ENABLED.write() = val;
+                                if let Some(storage) = web_sys::window()
+                                    .and_then(|w| w.local_storage().ok())
+                                    .flatten()
+                                {
+                                    let _ = storage.set_item(
+                                        "contribution_enabled",
+                                        if val { "true" } else { "false" },
+                                    );
+                                }
+                                // When toggled ON, re-queue already-discovered apps
+                                // so they get contributed on the next diagnostics poll
+                                if val {
+                                    crate::api::contribution::retrigger_contributions();
+                                }
+                            },
+                        }
+                        span { if enabled { "Enabled" } else { "Disabled" } }
                     }
-                    span { "Enable contribution pipeline" }
                 }
-
-                p { class: "text-secondary", style: "font-size: 0.8rem;",
-                    "When enabled, discovered web app metadata is contributed to the search index."
+                p { class: "text-secondary",
+                    "When enabled, your browser shares discovered web app metadata with the decentralized search index."
+                }
+                ul { class: "settings-explanation text-secondary",
+                    li { "Your node scans for web apps on the Freenet network" }
+                    li { "Metadata is extracted locally in your browser" }
+                    li { "Contributions are signed with your cryptographic identity" }
+                    li { "The shared index grows as more people contribute" }
                 }
             }
 
-            div { class: "settings-section",
-                h2 { "Identity" }
+            div { class: "settings-card",
+                div { class: "settings-card-header",
+                    h3 { "Identity" }
+                }
+                p { class: "text-secondary",
+                    "Your identity is a cryptographic keypair stored locally in your browser. It's used to sign your contributions so others can verify them."
+                }
 
-                div { style: "margin-bottom: 0.5rem;",
+                div { class: "settings-identity-row",
                     span { "Public key: " }
-                    span { class: "settings-pubkey", "{pubkey_display}" }
+                    span { class: "settings-pubkey mono", "{pubkey_display}" }
                 }
 
                 button {
@@ -92,8 +103,8 @@ pub fn SettingsPanel() -> Element {
             }
 
             if !history.is_empty() {
-                div { class: "settings-section",
-                    h2 { "Contribution History" }
+                div { class: "settings-card",
+                    h3 { "Contribution History" }
 
                     ul { class: "contribution-history",
                         for record in history.iter().rev().take(20) {

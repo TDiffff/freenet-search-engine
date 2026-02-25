@@ -2,7 +2,7 @@
 
 use dioxus::prelude::*;
 
-use crate::state::{NODE_HTTP_BASE, SEARCH_RESULTS, SHARDS_AVAILABLE, SHARDS_TOTAL};
+use crate::state::{NODE_HTTP_BASE, SEARCH_QUERY, SEARCH_RESULTS, SHARDS_AVAILABLE, SHARDS_TOTAL};
 
 #[component]
 pub fn SearchResults() -> Element {
@@ -10,6 +10,8 @@ pub fn SearchResults() -> Element {
     let shards_available = *SHARDS_AVAILABLE.read();
     let shards_total = *SHARDS_TOTAL.read();
     let node_base = NODE_HTTP_BASE.read();
+
+    let query = SEARCH_QUERY.read().clone();
 
     rsx! {
         div { class: "search-results",
@@ -21,8 +23,13 @@ pub fn SearchResults() -> Element {
 
             if results.is_empty() {
                 div { class: "directory-empty",
-                    p { "No results found." }
-                    p { class: "text-secondary", "Try a different search term." }
+                    if query.is_empty() {
+                        p { "No results found." }
+                        p { class: "text-secondary", "Try a different search term." }
+                    } else {
+                        p { "No results found for '{query}'." }
+                        p { class: "text-secondary", "Try different keywords or a broader search." }
+                    }
                 }
             } else {
                 div { class: "search-results-count",
@@ -52,6 +59,7 @@ pub fn SearchResults() -> Element {
                                     class: "search-result-title",
                                     href: "{url}",
                                     target: "_blank",
+                                    span { class: "search-result-arrow", "\u{2192} " }
                                     "{result.title}"
                                 }
 
@@ -70,17 +78,10 @@ pub fn SearchResults() -> Element {
                                         title: "{result.contract_key}",
                                         "{short_key}"
                                     }
-                                    span { class: "search-result-score",
-                                        "score: {result.combined_score}"
-                                    }
-                                }
-
-                                div { class: "search-result-verification",
-                                    span { class: "verification-label", "Status" }
                                     span { class: "{status_class}", "{status_text}" }
-                                    span { class: "verification-sep" }
-                                    span { class: "verification-label", "Validations" }
-                                    span { class: "verification-value", "{result.attestation_count}" }
+                                    span { class: "search-result-score",
+                                        "{result.attestation_count} validations"
+                                    }
                                 }
                             }
                         }

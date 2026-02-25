@@ -42,10 +42,17 @@ pub fn AppCard(
     };
     let status_text = status.as_deref().unwrap_or("Unverified");
 
+    let att_label = if attestation_count == 1 {
+        "1 validation".to_string()
+    } else {
+        format!("{attestation_count} validations")
+    };
+
     rsx! {
         div { class: "app-card",
             div { class: "app-card-header",
                 h3 { class: "{title_class}", "{display_title}" }
+                span { class: "{status_class}", "{status_text}" }
             }
 
             if let Some(desc) = description.as_ref() {
@@ -71,7 +78,7 @@ pub fn AppCard(
                 }
             }
 
-            // Stats row: version, size, subscribers
+            // Stats row: version, size, subscribers, validations
             div { class: "app-card-stats",
                 if let Some(v) = version {
                     span { class: "stat", title: "Contract metadata version", "v{v}" }
@@ -80,22 +87,17 @@ pub fn AppCard(
                     span { class: "stat", title: "Contract state size", "{s}" }
                 }
                 span { class: "stat", title: "Active subscribers", "{sub_str}" }
-            }
-
-            // Verification section
-            div { class: "app-card-verification",
-                div { class: "verification-row",
-                    span { class: "verification-label", "Status" }
-                    span { class: "{status_class}", "{status_text}" }
-                }
-                div { class: "verification-row",
-                    span { class: "verification-label", "Validations" }
-                    span { class: "verification-value", "{attestation_count}" }
-                }
+                span { class: "stat", title: "Network validations", "{att_label}" }
             }
 
             div { class: "app-card-footer",
-                span { class: "timestamp", "Discovered {date_str}" }
+                {
+                    let publish_str = match version {
+                        Some(v) if v > 0 => format!("Published {}", format_date(v * 60)),
+                        _ => format!("Published {}", date_str),
+                    };
+                    rsx! { span { class: "timestamp", "{publish_str}" } }
+                }
 
                 a {
                     href: "{node_base}/v1/contract/web/{contract_key}/",

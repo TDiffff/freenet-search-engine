@@ -14,6 +14,7 @@ pub struct CatalogParameters {
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CatalogState {
     pub entries: BTreeMap<String, CatalogEntry>,
+    #[serde(default)]
     pub contributors: BTreeMap<[u8; 32], ContributorScore>,
 }
 
